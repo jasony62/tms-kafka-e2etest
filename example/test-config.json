@@ -1,0 +1,14 @@
+{
+  "kafka": {
+    "servers": "broker1:9092",
+    "produce": {
+      "topic_name": "test_topic",
+      "client_id": "test001"
+    },
+    "consume": {
+      "topic_name": "test_topic",
+      "group_id": "test_group",
+      "client_id": "tester001"
+    }
+  }
+}

@@ -1,0 +1,23 @@
+[
+  {
+    "config": "tests/test-config.json",
+    "data": "tests/produce-data.json",
+    "schema": "tests/consume-schema.json",
+    "key": "tests/consume-key.json",
+    "name": "batch_1-1"
+  },
+  {
+    "config": "tests/test-config.json",
+    "data": "tests/produce-data.json",
+    "schema": "tests/consume-schema.json",
+    "key": "tests/consume-key.json",
+    "name": "batch_1-2"
+  },
+  {
+    "config": "tests/test-config.json",
+    "data": "tests/produce-data.json",
+    "schema": "tests/consume-schema.json",
+    "key": "tests/consume-key.json",
+    "name": "batch_1-3"
+  }
+]
