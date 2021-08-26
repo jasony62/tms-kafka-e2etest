@@ -8,7 +8,7 @@ import json
 import time
 import logging
 import logging.config
-from kafka import KafkaProducer, KafkaConsumer
+from kafka import KafkaProducer, KafkaConsumer, TopicPartition, ConsumerRebalanceListener
 from jsonschema import Draft7Validator
 from jsonpath_ng import parse
 
@@ -65,9 +65,11 @@ class _TestContext:
         self.servers = config.get('kafka.servers')
         self.produce_topic_name = config.get('kafka.produce.topic_name')
         self.produce_client_id = config.get('kafka.produce.client_id')
+        self.produce_partition_seq = config.get('kafka.produce.partition')
         self.consume_topic_name = config.get('kafka.consume.topic_name')
         self.group_id = config.get('kafka.consume.group_id')
         self.consume_client_id = config.get('kafka.consume.client_id')
+        self.consume_partition_id = config.get('kafka.consume.partition')
         # 设置输出测试结果的logger
         self.loggerHandler = None
         self._setResultLogger()
@@ -194,6 +196,15 @@ class _TestIns:
                         loggerResult.info(errmsg)
 
 
+# 监听Rebalance事件
+class _TmsConsumerRebalanceListener(ConsumerRebalanceListener):
+    def on_partitions_revoked(self, revoked):
+        logger.debug("ConsumerRebalance - 消费端取消分区\n{}".format(revoked))
+
+    def on_partitions_assigned(self, assigned):
+        logger.debug("ConsumerRebalance - 消费端分配分区\n{}".format(assigned))
+
+
 # 消费线程
 class __ConsumeThread(threading.Thread):
     def __init__(self, threadID, name, context):
@@ -201,11 +212,15 @@ class __ConsumeThread(threading.Thread):
         self.threadID = threadID
         self.name = name
         self.context = context
+        self.__stopped = False  # 终止执行
 
     def run(self):
         logger.debug("开始消费线程：" + self.name)
         self.consume()
         logger.debug("退出消费线程：" + self.name)
+
+    def stop(self):
+        self.__stopped = True
 
     # 消费数据
     def consume(self):
@@ -215,21 +230,40 @@ class __ConsumeThread(threading.Thread):
             jsonstr = f.read()
             schema = json.loads(jsonstr)
 
-        consumer = KafkaConsumer(context.consume_topic_name,
-                                 client_id=context.consume_client_id,
-                                 group_id=context.group_id,
-                                 enable_auto_commit=False,
-                                 auto_offset_reset='earliest',
-                                 bootstrap_servers=context.servers)
+        if context.consume_partition_id is None:
+            # 自动分配分区
+            logger.debug("等待消费端自动分配分区")
+            consumer = KafkaConsumer(group_id=context.group_id,
+                                     client_id=context.consume_client_id,
+                                     enable_auto_commit=False,
+                                     bootstrap_servers=context.servers)
+            rebalanceListener = _TmsConsumerRebalanceListener()
+            consumer.subscribe([context.consume_topic_name],
+                               listener=rebalanceListener)
+            ids = consumer.partitions_for_topic(context.consume_topic_name)
+            logger.debug("消费端获得分区 partition={}".format(ids))
+        else:
+            # 指定分区
+            logger.debug("消费端指定分区 partition={}".format(
+                context.consume_partition_id))
+            consumer = KafkaConsumer(group_id=context.group_id,
+                                     client_id=context.consume_client_id,
+                                     enable_auto_commit=False,
+                                     bootstrap_servers=context.servers)
+            part = TopicPartition(context.consume_topic_name,
+                                  context.consume_partition_id)
+            consumer.assign([part])
 
-        logger.info('消费端【group_id={},client_id={}】开始从【topic={}】接收数据'.format(
-            context.group_id, context.consume_client_id,
-            context.consume_topic_name))
+        logger.info(
+            '消费端【group_id={},client_id={}】bootstrap_connected={} 开始从【topic={}】接收数据'
+            .format(context.group_id, context.consume_client_id,
+                    consumer.bootstrap_connected(),
+                    context.consume_topic_name))
 
         max_loop = context.rawArgs.maxretries or 10  # 最大循环次数
         loop = 0  # 已循环次数
         # 从队列中读取数据
-        while loop < max_loop:
+        while not self.__stopped and loop < max_loop:
             loop += 1
             batch = consumer.poll(timeout_ms=100)  # 从kafka获取批量数据
             if len(batch.values()) == 0:
@@ -262,7 +296,9 @@ def __produce(context):
         jsonstr = f.read()
 
     # 字符串转字节数组
-    future = producer.send(context.produce_topic_name, jsonstr.encode())
+    future = producer.send(context.produce_topic_name,
+                           value=jsonstr.encode(),
+                           partition=context.produce_partition_seq)
     result = future.get(timeout=3)
     logger.info("完成发送数据 topic={}, partition={}, offset={}".format(
         result.topic, result.partition, result.offset))
@@ -292,7 +328,12 @@ def _run(rawArgs):
         # 开启新线程
         consumeThread.start()
         # 等待消费线程结束
-        consumeThread.join()
+        try:
+            consumeThread.join()
+        except KeyboardInterrupt:
+            logger.info('请耐心等待程序自动结束')
+            consumeThread.stop()
+            consumeThread.join()
 
     # 输出测试结果
     context.outputResult()

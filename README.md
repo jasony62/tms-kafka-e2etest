@@ -25,10 +25,12 @@
 | kafka.produce            | kafka 生产端配置           | 是   | object        |
 | kafka.produce.topic_name | kafka 生产端主题名称       | 是   | string        |
 | kafka.produce.client_id  | kafka 生产端客户端名称     | 是   | string        |
+| kafka.produce.partition  | kafka 生产端指定发送的分区 | 否   | integer       |
 | kafka.consume            | kafka 消费端配置           | 是   | object        |
 | kafka.consume.topic_name | kafka 消费端主题名称       | 是   | string        |
 | kafka.consume.group_id   | kafka 消费端主题消费组名称 | 是   | string        |
 | kafka.consume.client_id  | kafka 消费端客户端名称     | 是   | string        |
+| kafka.consume.partition  | kafka 消费端指定消费的分区 | 否   | integer       |
 
 参见 example 目录下的示例。
 
@@ -50,15 +52,15 @@
 
 # 进入容器
 
-> docker run -it --rm --name tms-kafka-tester --network try-kafka-test_kf_net -v $PWD/example:/home/tests tms/kafka-tester sh
+> docker run -it --rm --name tms-kafka-tester --network tms-kafka-e2etest_kf_net -v $PWD/example:/home/tests tms/kafka-tester sh
 
 测试结果输出到宿主机
 
-> docker run -it --rm --name tms-kafka-tester --network try-kafka-test_kf_net -v $PWD/example:/home/tests -v $PWD/result:/home/result tms/kafka-tester sh
+> docker run -it --rm --name tms-kafka-tester --network tms-kafka-e2etest_kf_net -v $PWD/example:/home/tests -v $PWD/result:/home/result tms/kafka-tester sh
 
 便于在本地环境上直接修改代码和日志输出配置
 
-> docker run -it --rm --name tms-kafka-tester --network try-kafka-test_kf_net -v $PWD/example:/home/tests -v $PWD/src/tester.py:/home/tester.py -v $PWD/src/logging.conf:/home/conf/logging.conf tms/kafka-tester sh
+> docker run -it --rm --name tms-kafka-tester --network tms-kafka-e2etest_kf_net -v $PWD/example:/home/tests -v $PWD/src/tester.py:/home/tester.py -v $PWD/src/logging.conf:/home/conf/logging.conf tms/kafka-tester sh
 
 # 执行测试程序
 
@@ -112,6 +114,10 @@
 查看消费组消费情况
 
 > kafka-consumer-groups.sh --bootstrap-server broker1:9092 --describe --group test_group
+
+查看主题下分区
+
+> kafka-topics.sh --describe --bootstrap-server broker1:9092 --topic test_topic
 
 清空指定 topic 中的数据
 
