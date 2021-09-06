@@ -62,6 +62,10 @@
 
 > docker run -it --rm --name tms-kafka-tester --network tms-kafka-e2etest_kf_net -v $PWD/example:/home/tests -v $PWD/src/tester.py:/home/tester.py -v $PWD/src/logging.conf:/home/conf/logging.conf tms/kafka-tester sh
 
+在 local 目录中放置本地数据方便验证
+
+> docker run -it --rm --name tms-kafka-tester --network tms-kafka-e2etest_kf_net -v $PWD/local:/home/tests -v $PWD/src/tester.py:/home/tester.py -v $PWD/src/logging.conf:/home/conf/logging.conf tms/kafka-tester sh
+
 # 执行测试程序
 
 `-c`或`--config`参数指定测试基本信息，例如：测试 kafka 连接参数等。

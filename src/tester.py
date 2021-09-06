@@ -18,14 +18,13 @@ loggerResult = logging.getLogger('result')  # 记录失败信息
 
 
 # 将json对象变为path-value对应关系
-def _flatJson(json, keys=(), flatted=None):
-    flatted = flatted or {}
+def _flatJson(json, keys=(), flatted={}):
     if isinstance(json, dict):  # 对象
         for key, value in json.items():
-            _flatJson(value, keys + (key, ), flatted)
+            flatted = _flatJson(value, keys + (key, ), flatted)
     elif isinstance(json, (list, tuple)):  # 数组
         for index in range(len(json)):
-            _flatJson(json[index], flatted, keys + (index, ), flatted)
+            flatted = _flatJson(json[index], keys + (index, ), flatted)
     else:
         flatted[keys] = json
 
@@ -47,7 +46,7 @@ class _JsonWrap:
         if len(values) == 1:
             return values[0].value
         elif len(values) > 1:
-            logger.warning("路径'{}'在对象中配置多个值\n{}".format(path, self.data))
+            logger.warning(f"路径'{path}'在对象中配置多个值\n{self.data}")
 
         return None
 
@@ -81,8 +80,8 @@ class _TestContext:
 
     # 设置输出测试结果的logger
     def _setResultLogger(self):
-        resultPath = os.path.abspath(
-            self.rawArgs.result or 'result/{}.log'.format(self.startAtStr))
+        resultPath = os.path.abspath(self.rawArgs.result
+                                     or f'result/{self.startAtStr}.log')
         resultDir = os.path.dirname(resultPath)
         if not os.path.exists(resultDir):
             os.makedirs(resultDir)
@@ -97,11 +96,11 @@ class _TestContext:
     def outputResult(self):
         rawArgs = self.rawArgs
         loggerResult.info('*' * 60)
-        loggerResult.info('name={}'.format(self.name))
-        loggerResult.info('start={}'.format(self.startAtStr))
-        loggerResult.info('produce-data={}'.format(rawArgs.data))
-        loggerResult.info('consume-schema={}'.format(rawArgs.schema))
-        loggerResult.info('consume-key={}'.format(rawArgs.key))
+        loggerResult.info(f'name={self.name}')
+        loggerResult.info(f'start={self.startAtStr}')
+        loggerResult.info(f'produce-data={rawArgs.data}')
+        loggerResult.info(f'consume-schema={rawArgs.schema}')
+        loggerResult.info(f'consume-key={rawArgs.key}')
         # 输出执行
         self.testIns.outputResult()
         # 双划线作为结束
@@ -160,9 +159,9 @@ class _TestIns:
 
     # 校验数据
     def validate(self, data, schema):
-        logger.debug('需要校验的数据\n{}'.format(data))
+        logger.debug(f'需要校验的数据\n{data}')
         if self.keyJson is not None:
-            logger.debug('检查数据是否和指定的key匹配，指定的key为\n{}'.format(self.keyJson))
+            logger.debug(f'检查数据是否和指定的key匹配，指定的key为\n{self.keyJson}')
             if not self.matchWithKey(data):
                 logger.warning('获得的数据和key不匹配，跳过校验')
                 return
@@ -172,8 +171,8 @@ class _TestIns:
         v = Draft7Validator(schema)
         for error in v.iter_errors(data):
             errmsgs.append(error.message)
-            logger.warning('发现校验错误：{}'.format(error.message))
-        logger.info('完成1次数据校验，有{}个错误'.format(len(errmsgs)))
+            logger.warning(f'发现校验错误：{error.message}')
+        logger.info(f'完成1次数据校验，有{len(errmsgs)}个错误')
         # 记录执行结果
         self.__validated.append(data)
         self.__errmsgs.append(errmsgs)
@@ -190,7 +189,7 @@ class _TestIns:
                 errmsgs = self.__errmsgs[i]
                 if len(errmsgs):
                     loggerResult.info('<' * 60)
-                    loggerResult.info('errors={}'.format(len(errmsgs)))
+                    loggerResult.info(f'errors={len(errmsgs)}')
                     loggerResult.info('>' * 60)
                     for errmsg in errmsgs:
                         loggerResult.info(errmsg)
@@ -199,10 +198,10 @@ class _TestIns:
 # 监听Rebalance事件
 class _TmsConsumerRebalanceListener(ConsumerRebalanceListener):
     def on_partitions_revoked(self, revoked):
-        logger.debug("ConsumerRebalance - 消费端取消分区\n{}".format(revoked))
+        logger.debug(f"ConsumerRebalance - 消费端取消分区\n{revoked}")
 
     def on_partitions_assigned(self, assigned):
-        logger.debug("ConsumerRebalance - 消费端分配分区\n{}".format(assigned))
+        logger.debug(f"ConsumerRebalance - 消费端分配分区\n{assigned}")
 
 
 # 消费线程
@@ -215,9 +214,9 @@ class __ConsumeThread(threading.Thread):
         self.__stopped = False  # 终止执行
 
     def run(self):
-        logger.debug("开始消费线程：" + self.name)
+        logger.debug(f"开始消费线程：{self.name}")
         self.consume()
-        logger.debug("退出消费线程：" + self.name)
+        logger.debug(f"退出消费线程：{self.name}")
 
     def stop(self):
         self.__stopped = True
@@ -236,16 +235,16 @@ class __ConsumeThread(threading.Thread):
             consumer = KafkaConsumer(group_id=context.group_id,
                                      client_id=context.consume_client_id,
                                      enable_auto_commit=False,
+                                     auto_offset_reset='earliest',
                                      bootstrap_servers=context.servers)
             rebalanceListener = _TmsConsumerRebalanceListener()
-            consumer.subscribe([context.consume_topic_name],
+            consumer.subscribe((context.consume_topic_name),
                                listener=rebalanceListener)
             ids = consumer.partitions_for_topic(context.consume_topic_name)
-            logger.debug("消费端获得分区 partition={}".format(ids))
+            logger.debug(f"消费端获得分区 partition={ids}")
         else:
             # 指定分区
-            logger.debug("消费端指定分区 partition={}".format(
-                context.consume_partition_id))
+            logger.debug(f"消费端指定分区 partition={context.consume_partition_id}")
             consumer = KafkaConsumer(group_id=context.group_id,
                                      client_id=context.consume_client_id,
                                      enable_auto_commit=False,
@@ -253,6 +252,13 @@ class __ConsumeThread(threading.Thread):
             part = TopicPartition(context.consume_topic_name,
                                   context.consume_partition_id)
             consumer.assign([part])
+
+        parts = [
+            TopicPartition(context.consume_topic_name, partid) for partid in
+            consumer.partitions_for_topic(context.consume_topic_name)
+        ]
+        logger.debug(f'消息端分区起始消费位置\n{consumer.beginning_offsets(parts)}')
+        logger.debug(f'消息端分区终止消费位置\n{consumer.end_offsets(parts)}')
 
         logger.info(
             '消费端【group_id={},client_id={}】bootstrap_connected={} 开始从【topic={}】接收数据'
@@ -267,14 +273,14 @@ class __ConsumeThread(threading.Thread):
             loop += 1
             batch = consumer.poll(timeout_ms=100)  # 从kafka获取批量数据
             if len(batch.values()) == 0:
-                logger.debug('[{}] - 未拉取到数据'.format(loop))
+                logger.debug(f'[{loop}] - 未拉取到数据')
                 time.sleep(1)  # 隔1秒钟取1次
                 continue
-            logger.info('[{}] - 拉取到数据'.format(loop))
+            logger.info(f'[{loop}] - 拉取到数据')
             # 如果一次拉取获得多条数据应该如何理解？
             for records in batch.values():
                 for record in records:
-                    logger.debug("消费端接收到数据\n{}".format(record))
+                    logger.debug(f"消费端接收到数据\n{record}")
                     data = json.loads(record.value)
                     context.testIns.validate(data, schema)
 
@@ -300,9 +306,11 @@ def __produce(context):
                            value=jsonstr.encode(),
                            partition=context.produce_partition_seq)
     result = future.get(timeout=3)
-    logger.info("完成发送数据 topic={}, partition={}, offset={}".format(
-        result.topic, result.partition, result.offset))
-    logger.debug('生产端完成数据发送\n{}'.format(result))
+
+    logger.debug(f'生产端完成数据发送\n{result}')
+    logger.info(
+        f"完成发送数据 topic={result.topic}, partition={result.partition}, offset={result.offset}"
+    )
 
     producer.close()
 
